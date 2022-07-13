@@ -1,0 +1,5 @@
+dash
+datetime
+dash-bootstrap-components
+pandas
+sqlalchemy
