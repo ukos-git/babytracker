@@ -133,11 +133,15 @@ app.layout = html.Div([
                     className='d-grid gap-2',
                     children=[
                         dbc.InputGroup([
+                            dbc.Button(
+                                html.I(className='fa-solid fa-rotate'),
+                                id='update-date-time',
+                                outline=True,
+                            ),
                             dbc.Input(
                                 id='date-time',
                                 type='datetime-local',
                                 min=dt.datetime.fromisoformat(BIRTH_DATE),
-                                value=dt.datetime.now().isoformat(timespec='minutes'),
                             ),
                             dbc.InputGroupText(id='dt-output-container'),
                         ], className='mb-3'),
@@ -573,6 +577,14 @@ for category in ['drink', 'diaper', 'pump', 'doctor']:
             hover=True
         ),
         return table
+
+
+@app.callback(
+    Output('date-time', 'value'),
+    Input('update-date-time', 'n_clicks'),
+)
+def update_datetime(_):
+    return dt.datetime.now().isoformat(timespec='minutes')
 
 
 if __name__ == '__main__':
