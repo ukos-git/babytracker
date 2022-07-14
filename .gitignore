@@ -1,6 +1,6 @@
 # ---> Project
-config.ini
-*.db
+data/config.ini
+data/*.db
 
 # ---> Python
 # Byte-compiled / optimized / DLL files

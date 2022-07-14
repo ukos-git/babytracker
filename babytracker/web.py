@@ -17,15 +17,15 @@ import os.path
 
 
 PROJECT_DIR = pathlib.Path(__file__).resolve().parents[1]
-DEBUG = False
+DATA_DIR = os.path.join(PROJECT_DIR, 'data')
 
 config = configparser.ConfigParser()
-config.read(os.path.join(PROJECT_DIR, 'config.ini'))
+config.read(os.path.join(DATA_DIR, 'config.ini'))
 
 BIRTH_DATE = config['baby']['birth']
 NAME = config['baby']['name']
 LOCALE = config['settings'].get('locale', 'de_DE')
-ENGINE = create_engine(f'sqlite:////{PROJECT_DIR}/{config["settings"]["database"]}')
+ENGINE = create_engine(f'sqlite:////{DATA_DIR}/{config["settings"]["database"]}')
 
 FEEDING_SOURCES = [
     {
@@ -576,4 +576,4 @@ for category in ['drink', 'diaper', 'pump', 'doctor']:
 
 
 if __name__ == '__main__':
-    app.run_server(debug=DEBUG, host='0.0.0.0')
+    app.run_server(debug=True, host='0.0.0.0')
