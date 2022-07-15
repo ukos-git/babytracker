@@ -567,7 +567,7 @@ for category in ['drink', 'diaper', 'pump', 'doctor']:
             df = pd.DataFrame()
         # work around for wrong display of boolean in React
         boolean = df.columns[df.dtypes == bool]
-        df[boolean] = df[boolean].replace(to_replace=[True, False], value=['\u2713', '\u274C'])
+        df[boolean] = df[boolean].replace(to_replace=[True, False], value=['🟢', '🔴'])
         table = dbc.Table.from_dataframe(  # pylint: disable=E1101
             df.tail().iloc[::-1],
             striped=True,
