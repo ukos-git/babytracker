@@ -22,7 +22,8 @@ DATA_DIR = os.path.join(PROJECT_DIR, 'data')
 config = configparser.ConfigParser()
 config.read(os.path.join(DATA_DIR, 'config.ini'))
 
-BIRTH_DATE = config['baby']['birth']
+SERVER_TZ = dt.datetime.utcnow().astimezone().tzinfo
+BIRTH_DATE = dt.datetime.fromisoformat(config['baby']['birth']).astimezone(SERVER_TZ).replace(tzinfo=None)
 NAME = config['baby']['name']
 LOCALE = config['settings'].get('locale', 'de_DE')
 ENGINE = create_engine(f'sqlite:////{DATA_DIR}/{config["settings"]["database"]}')
@@ -92,8 +93,9 @@ def get_bilirubin_figure():
 
 def get_age(input_date=dt.datetime.now()):
     """Date diff in hours between birth and input date"""
-    birth = dt.datetime.fromisoformat(BIRTH_DATE)
-    return (input_date - birth).total_seconds() / 3600
+    if not isinstance(input_date, dt.datetime):
+        raise TypeError
+    return (input_date - BIRTH_DATE) / dt.timedelta(hours=1)
 
 
 app = dash.Dash(
@@ -141,7 +143,7 @@ app.layout = html.Div([
                             dbc.Input(
                                 id='date-time',
                                 type='datetime-local',
-                                min=dt.datetime.fromisoformat(BIRTH_DATE),
+                                min=BIRTH_DATE.isoformat(),
                             ),
                             dbc.InputGroupText(id='dt-output-container'),
                         ], className='mb-3'),
@@ -560,10 +562,9 @@ for category in ['drink', 'diaper', 'pump', 'doctor']:
     def on_update_database(_):
         triggered = ctx.triggered_prop_ids.values()
         category = next(iter(triggered)).get('index')
-        birth = dt.datetime.fromisoformat(BIRTH_DATE)
         try:
             df = pd.read_sql_table(category, con=ENGINE).sort_values(by='time').tail()
-            df['time'] = (df['time'] - birth).astype(str)
+            df['time'] = (df.time - BIRTH_DATE).astype(str)
         except ValueError as err:
             app.server.logger.critical(err)
             df = pd.DataFrame()
