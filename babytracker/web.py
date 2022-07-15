@@ -91,13 +91,6 @@ def get_bilirubin_figure():
     return dcc.Graph(figure=pio)
 
 
-def get_age(input_date=dt.datetime.now()):
-    """Date diff in hours between birth and input date"""
-    if not isinstance(input_date, dt.datetime):
-        raise TypeError
-    return (input_date - BIRTH_DATE) / dt.timedelta(hours=1)
-
-
 app = dash.Dash(
     __name__,
     external_stylesheets=[
@@ -477,8 +470,10 @@ def update_output(date_value):
         date_object = dt.datetime.now()
     else:
         date_object = dt.datetime.fromisoformat(date_value)
-    age = get_age(date_object)
-    return f'{age:.0f}h'
+    age = date_object - BIRTH_DATE
+    hours, temp = divmod(age.seconds, dt.timedelta(hours=1).seconds)
+    minutes = temp // dt.timedelta(minutes=1).seconds
+    return f'{age.days}d{hours}h{minutes}m'
 
 
 @app.callback(
