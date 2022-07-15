@@ -564,7 +564,9 @@ for category in ['drink', 'diaper', 'pump', 'doctor']:
         category = next(iter(triggered)).get('index')
         try:
             df = pd.read_sql_table(category, con=ENGINE).sort_values(by='time').tail()
-            df['time'] = (df.time - BIRTH_DATE).astype(str)
+            df['time'] = (df.time - BIRTH_DATE)\
+                .dt.round(dt.timedelta(minutes=1))\
+                .astype(str).str.removesuffix(':00')
         except ValueError as err:
             app.server.logger.critical(err)
             df = pd.DataFrame()
