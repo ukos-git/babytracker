@@ -587,5 +587,29 @@ def update_datetime(_):
     return dt.datetime.now().isoformat(timespec='minutes')
 
 
+@app.callback(
+    Output({'index': 'pee-color', 'type': 'diaper'}, 'value'),
+    Input({'index': 'pee', 'type': 'diaper'}, 'value'),
+)
+def update_last_pee_color(value):
+    if not value:
+        return dash.no_update
+    df = pd.read_sql_table('diaper', con=ENGINE).set_index('time')
+    color = df[df.pee]['pee-color'].dropna().sort_index().tail(1).iloc[0]
+    return color
+
+
+@app.callback(
+    Output({'index': 'poo-color', 'type': 'diaper'}, 'value'),
+    Input({'index': 'poo', 'type': 'diaper'}, 'value'),
+)
+def update_last_poo_color(value):
+    if not value:
+        return dash.no_update
+    df = pd.read_sql_table('diaper', con=ENGINE).set_index('time')
+    color = df[df.poo]['poo-color'].dropna().sort_index().tail(1).iloc[0]
+    return color
+
+
 if __name__ == '__main__':
     app.run_server(debug=True, host='0.0.0.0')
