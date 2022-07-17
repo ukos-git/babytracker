@@ -2,18 +2,18 @@
 """Baby tracker
 """
 
+import configparser
 import datetime as dt
+import json
+import os.path
+import pathlib
+
 import dash
 from dash import html, dcc, Input, Output, ALL, ctx
 import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
-import json
 from sqlalchemy import create_engine
-
-import configparser
-import pathlib
-import os.path
 
 
 PROJECT_DIR = pathlib.Path(__file__).resolve().parents[1]
@@ -534,10 +534,10 @@ for category in ['drink', 'diaper', 'pump', 'doctor']:
         triggered = [p['type'] for p in ctx.triggered_prop_ids.values()]
         if 'store' in triggered:
             return 'primary', False
-        category = store.pop('type')
+        store_category = store.pop('type')
         df = pd.DataFrame.from_dict([store])
         df['time'] = df.time.apply(dt.datetime.fromisoformat)
-        df.set_index('time').to_sql(category, con=ENGINE, if_exists='append')
+        df.set_index('time').to_sql(store_category, con=ENGINE, if_exists='append')
         app.server.logger.info(f'store data for {store}')
         return 'success', True
 
@@ -556,9 +556,10 @@ for category in ['drink', 'diaper', 'pump', 'doctor']:
     )
     def on_update_database(_):
         triggered = ctx.triggered_prop_ids.values()
-        category = next(iter(triggered)).get('index')
+        triggered_category = next(iter(triggered)).get('index')
         try:
-            df = pd.read_sql_table(category, con=ENGINE).sort_values(by='time').tail()
+            df = pd.read_sql_table(triggered_category, con=ENGINE)\
+                .sort_values(by='time').tail()
             df['time'] = (df.time - BIRTH_DATE)\
                 .dt.round(dt.timedelta(minutes=1))\
                 .astype(str).str.removesuffix(':00')
@@ -573,7 +574,7 @@ for category in ['drink', 'diaper', 'pump', 'doctor']:
             striped=True,
             bordered=True,
             hover=True
-        ),
+        )
         return table
 
 
