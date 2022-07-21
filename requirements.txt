@@ -3,3 +3,5 @@ datetime==4.5
 dash-bootstrap-components==1.2.0
 pandas==1.4.3
 sqlalchemy==1.4.39
+lxml==4.7.1
+babel==2.10.3

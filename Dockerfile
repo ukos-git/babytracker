@@ -9,7 +9,7 @@ RUN apt-get update && \
 RUN mkdir /app
 WORKDIR /app
 COPY requirements.txt /app/
-RUN pip install -r requirements.txt
+RUN pip3 install -r requirements.txt
 COPY babytracker /app/babytracker
 VOLUME data
 COPY data/config.ini /app/data/config.ini

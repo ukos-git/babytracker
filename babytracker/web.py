@@ -2,18 +2,22 @@
 """Baby tracker
 """
 
+import collections.abc
 import configparser
 import datetime as dt
+import functools
 import json
 import os.path
 import pathlib
+import lxml.etree as xml
 
 import dash
-from dash import html, dcc, Input, Output, ALL, ctx
+from dash import html, dcc, Input, Output, State, ALL, ctx
 import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
 from sqlalchemy import create_engine
+import babel.dates as bd
 
 
 PROJECT_DIR = pathlib.Path(__file__).resolve().parents[1]
@@ -27,6 +31,7 @@ BIRTH_DATE = dt.datetime.fromisoformat(config['baby']['birth']).astimezone(SERVE
 NAME = config['baby']['name']
 LOCALE = config['settings'].get('locale', 'de_DE')
 ENGINE = create_engine(f'sqlite:////{DATA_DIR}/{config["settings"]["database"]}')
+TABLE_PAGE_SIZE = 5
 
 FEEDING_SOURCES = [
     {
@@ -89,6 +94,125 @@ def get_bilirubin_figure():
         yaxis={'title': 'Bilirubin [µmol/l]'}
     )
     return dcc.Graph(figure=pio)
+
+
+def deep_update(data, update):
+    for key, value in update.items():
+        if isinstance(value, collections.abc.Mapping):
+            data[key] = deep_update(data.get(key, {}), value)
+        elif isinstance(value, collections.abc.MutableSequence):
+            new = data.get(key, [])
+            new.extend(value)
+            data[key] = new
+        else:
+            data[key] = value
+    return data
+
+
+def generate_table(**kwargs):
+    default = dict(
+        page_current=0,
+        page_size=TABLE_PAGE_SIZE,
+        row_deletable=True,
+        tooltip_duration=None,
+        hidden_columns=['time', 'age'],
+        markdown_options={'html': True},
+        merge_duplicate_headers=True,
+        columns=[
+            {
+                'id': 'time',
+                'name': ['time', 'date'],
+            },
+            {
+                'id': 'delta',
+                'name': ['time', 'delta'],
+            },
+            {
+                'id': 'age',
+                'name': ['time', 'age'],
+            },
+        ],
+        css=[
+            {
+                'selector': '.column-header--hide',
+                'rule': 'display: none',
+            },
+            {
+                'selector': 'p',  # markdown cells wrap icons
+                'rule': 'margin: 0; text-align: center',
+            },
+            {
+                'selector': '.fa-circle.smoke',
+                'rule': 'color: WhiteSmoke',
+            },
+            {
+                'selector': '.fa-circle-check',
+                'rule': 'color: green',
+            },
+            {
+                'selector': '.fa-circle-xmark',
+                'rule': 'color: red',
+            },
+        ],
+        style_table={
+            'overflow': 'auto',
+            'minWidth': '100%',
+        },
+        style_data_conditional=[],
+        style_data={
+            'whiteSpace': 'normal',
+            'height': 'auto',
+        },
+        style_filter_conditional=[],
+        style_filter={},
+        style_header_conditional=[],
+        style_header={
+            'whiteSpace': 'normal',
+            'overflow': 'auto',
+            'textAlign': 'center',
+        },
+        style_cell={
+            'maxWidth': 0,
+        },
+    )
+    settings = deep_update(default, kwargs)
+    for column in settings.get('columns', {}):
+        column.update({
+            'hideable': 'last',
+        })
+        if column.get('type') == 'boolean':
+            column.update({
+                'type': 'text',
+                'presentation': 'markdown',
+            })
+    return dash.dash_table.DataTable(**settings)
+
+
+@functools.cache
+def generate_fa_icon(icon, **kwargs):
+    """create a fontawesome circled icon with background
+
+    See: https://fontawesome.com/docs/web/style/stack
+
+    >>> print(generate_fa_icon('xmark', pretty_print=True))
+    <span class="fa-stack">
+      <i class="fa-stack-1x fa-solid fa-circle smoke"></i>
+      <i class="fa-stack-1x fa-solid fa-circle-xmark"></i>
+    </span>
+    <BLANKLINE>
+    """
+    fa_icon_xml = xml.Element('span', attrib={'class': 'fa-stack'})
+    icon_class = 'fa-stack-1x fa-solid'
+    child = xml.SubElement(fa_icon_xml, 'i')
+    child.set('class', f'{icon_class} fa-circle smoke')
+    child.text = ''  # # do not collapse empty elements
+    child = xml.SubElement(fa_icon_xml, 'i')
+    child.set('class', f'{icon_class} fa-circle-{icon}')
+    child.text = ''  # # do not collapse empty elements
+    kwargs.update({
+        'encoding': 'unicode',
+    })
+    return xml.tostring(fa_icon_xml, **kwargs)
 
 
 app = dash.Dash(
@@ -211,7 +335,61 @@ app.layout = html.Div([
                         ),
                         dcc.Store(id={'index': 'drink', 'type': 'store'}),
                         html.Div(id={'index': 'drink', 'type': 'debug'}, className='row visually-hidden'),
-                        dbc.Card(id={'index': 'drink', 'type': 'table'}),
+                        dbc.Tabs(
+                            id={'index': 'drink', 'type': 'tabs'},
+                            active_tab='table2',
+                            children=[
+                                dbc.Tab(
+                                    dbc.Card(id={'index': 'drink', 'type': 'table'}),
+                                    label='Tabelle',
+                                    tab_id='table',
+                                ),
+                                dbc.Tab(
+                                    dbc.Card(generate_table(
+                                        id={'index': 'drink', 'type': 'table2'},
+                                        columns=[
+                                            {
+                                                'id': 'breastmilk',
+                                                'name': ['drink', 'breastmilk'],
+                                                'type': 'numeric',
+                                            },
+                                            {
+                                                'id': 'preHA',
+                                                'name': ['volume', 'preHA'],
+                                                'type': 'numeric',
+                                            },
+                                            {
+                                                'id': 'breast-left',
+                                                'name': ['breast', 'left'],
+                                                'type': 'boolean',
+                                            },
+                                            {
+                                                'id': 'breast-right',
+                                                'name': ['breast', 'right'],
+                                                'type': 'boolean',
+                                            },
+                                        ],
+                                        style_cell_conditional=[
+                                            {
+                                                'if': {'column_id': 'breast-left'},
+                                                'width': '10%',
+                                            },
+                                            {
+                                                'if': {'column_id': 'breast-right'},
+                                                'width': '10%',
+                                            },
+                                        ],
+                                    )),
+                                    label='Tabelle2',
+                                    tab_id='table2',
+                                ),
+                                dbc.Tab(
+                                    dbc.Card(id={'index': 'drink', 'type': 'graph'}),
+                                    label='Graph',
+                                    tab_id='graph',
+                                ),
+                            ],
+                        ),
                     ],
                 )],
             ),
@@ -313,7 +491,57 @@ app.layout = html.Div([
                         ),
                         dcc.Store(id={'index': 'diaper', 'type': 'store'}),
                         html.Div(id={'index': 'diaper', 'type': 'debug'}, className='row visually-hidden'),
-                        dbc.Card(id={'index': 'diaper', 'type': 'table'}),
+                        dbc.Tabs(
+                            id={'index': 'diaper', 'type': 'tabs'},
+                            active_tab='table2',
+                            children=[
+                                dbc.Tab(
+                                    dbc.Card(id={'index': 'diaper', 'type': 'table'}),
+                                    label='Tabelle',
+                                    tab_id='table',
+                                ),
+                                dbc.Tab(
+                                    dbc.Card(generate_table(
+                                        id={'index': 'diaper', 'type': 'table2'},
+                                        columns=[
+                                            {
+                                                'id': 'changed',
+                                                'name': ['diaper', 'changed'],
+                                                'type': 'boolean',
+                                            },
+                                            {
+                                                'id': 'pee',
+                                                'name': ['pee', 'present'],
+                                                'type': 'boolean',
+                                            },
+                                            {
+                                                'id': 'pee-color',
+                                                'name': ['pee', 'color'],
+                                                'type': 'text',
+                                            },
+                                            {
+                                                'id': 'poo',
+                                                'name': ['poo', 'present'],
+                                                'type': 'boolean',
+                                            },
+                                            {
+                                                'id': 'poo-color',
+                                                'name': ['poo', 'color'],
+                                                'type': 'text',
+                                            },
+                                        ],
+                                        hidden_columns=['poo-color', 'pee-color'],
+                                    )),
+                                    label='Tabelle2',
+                                    tab_id='table2',
+                                ),
+                                dbc.Tab(
+                                    dbc.Card(id={'index': 'diaper', 'type': 'graph'}),
+                                    label='Graph',
+                                    tab_id='graph',
+                                ),
+                            ],
+                        ),
                     ],
                 )],
             ),
@@ -368,7 +596,41 @@ app.layout = html.Div([
                         ),
                         dcc.Store(id={'index': 'pump', 'type': 'store'}),
                         html.Div(id={'index': 'pump', 'type': 'debug'}, className='row visually-hidden'),
-                        dbc.Card(id={'index': 'pump', 'type': 'table'}),
+                        dbc.Tabs(
+                            id={'index': 'pump', 'type': 'tabs'},
+                            active_tab='table2',
+                            children=[
+                                dbc.Tab(
+                                    dbc.Card(id={'index': 'pump', 'type': 'table'}),
+                                    label='Tabelle',
+                                    tab_id='table',
+                                ),
+                                dbc.Tab(
+                                    dbc.Card(generate_table(
+                                        id={'index': 'pump', 'type': 'table2'},
+                                        columns=[
+                                            {
+                                                'id': 'left',
+                                                'name': ['breast', 'left'],
+                                                'type': 'numeric',
+                                            },
+                                            {
+                                                'id': 'right',
+                                                'name': ['breast', 'right'],
+                                                'type': 'numeric',
+                                            },
+                                        ],
+                                    )),
+                                    label='Tabelle2',
+                                    tab_id='table2',
+                                ),
+                                dbc.Tab(
+                                    dbc.Card(id={'index': 'pump', 'type': 'graph'}),
+                                    label='Graph',
+                                    tab_id='graph',
+                                ),
+                            ],
+                        ),
                     ],
                 )],
             ),
@@ -441,17 +703,60 @@ app.layout = html.Div([
                         ),
                         dcc.Store(id={'index': 'doctor', 'type': 'store'}),
                         html.Div(id={'index': 'doctor', 'type': 'debug'}, className='row visually-hidden'),
-                        dbc.Card(id={'index': 'doctor', 'type': 'table'}),
-                        dbc.Card([
-                            dbc.CardBody(get_bilirubin_figure()),
-                            dbc.CardFooter(
-                                dcc.Link(
-                                    'Bhutani et al. Pediatrics. 1999 Jan;103(1):6-14',
-                                    href='https://doi.org/10.1542/peds.103.1.6',
-                                    target='_blank',
-                                )
-                            )
-                        ]),
+                        dbc.Tabs(
+                            id={'index': 'doctor', 'type': 'tabs'},
+                            active_tab='table2',
+                            children=[
+                                dbc.Tab(
+                                    dbc.Card(id={'index': 'doctor', 'type': 'table'}),
+                                    label='Tabelle',
+                                    tab_id='table',
+                                ),
+                                dbc.Tab(
+                                    dbc.Card(generate_table(
+                                        id={'index': 'doctor', 'type': 'table2'},
+                                        columns=[
+                                            {
+                                                'id': 'weight',
+                                                'name': ['measures', 'weight'],
+                                                'type': 'numeric',
+                                            },
+                                            {
+                                                'id': 'circumference',
+                                                'name': ['measures', 'circumference'],
+                                                'type': 'numeric',
+                                            },
+                                            {
+                                                'id': 'bilirubin',
+                                                'name': ['measures', 'bilirubin'],
+                                                'type': 'numeric',
+                                            },
+                                        ],
+                                    )),
+                                    label='Tabelle2',
+                                    tab_id='table2',
+                                ),
+                                dbc.Tab(
+                                    dbc.Card(id={'index': 'doctor', 'type': 'graph'}),
+                                    label='Graph',
+                                    tab_id='graph',
+                                ),
+                                dbc.Tab(
+                                    dbc.Card([
+                                        dbc.CardBody(get_bilirubin_figure()),
+                                        dbc.CardFooter(
+                                            dcc.Link(
+                                                'Bhutani et al. Pediatrics. 1999 Jan;103(1):6-14',
+                                                href='https://doi.org/10.1542/peds.103.1.6',
+                                                target='_blank',
+                                            )
+                                        )
+                                    ]),
+                                    label='Bilirubin',
+                                    tab_id='bilirubin',
+                                ),
+                            ],
+                        ),
                     ],
                 )],
             ),
@@ -554,7 +859,7 @@ for category in ['drink', 'diaper', 'pump', 'doctor']:
         Input({'index': category, 'type': 'update'}, 'color'),
         prevent_initial_call=True,
     )
-    def on_update_database(_):
+    def update_table1(_):
         triggered = ctx.triggered_prop_ids.values()
         triggered_category = next(iter(triggered)).get('index')
         try:
@@ -576,6 +881,66 @@ for category in ['drink', 'diaper', 'pump', 'doctor']:
             hover=True
         )
         return table
+
+    @app.callback(
+        Output({'index': category, 'type': 'table2'}, 'data'),
+        Output({'index': category, 'type': 'table2'}, 'tooltip_data'),
+        Input({'index': category, 'type': 'update'}, 'color'),
+        prevent_initial_call=True,
+    )
+    def update_table2(_):
+        triggered = ctx.triggered_prop_ids.values()
+        triggered_category = next(iter(triggered)).get('index')
+        try:
+            df = pd.read_sql_table(triggered_category, con=ENGINE)\
+                .sort_values(by='time', ascending=False)
+        except ValueError as err:
+            app.server.logger.critical(err)
+            df = pd.DataFrame()
+
+        def localize_timedelta_dir(time_delta):
+            return bd.format_timedelta(
+                time_delta,
+                locale=LOCALE,
+                granularity='minutes',
+                add_direction=True,
+            )
+        now = dt.datetime.now().replace(tzinfo=None)
+        delta = (df.time - now).map(localize_timedelta_dir)
+        df.insert(1, 'delta', delta)
+
+        def localize_timedelta(datetime):
+            return bd.format_timedelta(
+                datetime,
+                locale=LOCALE,
+                granularity='minutes'
+            )
+        age = (BIRTH_DATE - df.time).map(localize_timedelta)
+        df.insert(2, 'age', age)
+
+        check = generate_fa_icon('check')
+        xmark = generate_fa_icon('xmark')
+
+        boolean = df.columns[df.dtypes == bool]
+        df[boolean] = df[boolean].replace(
+            to_replace=[True, False],
+            value=[check, xmark])
+        data = df.to_dict('records')
+
+        def localize_datetime(datetime):
+            return bd.format_datetime(
+                datetime,
+                locale=LOCALE,
+                format='medium',
+            )
+        tooltip = [{
+            'delta': {
+                'value': localize_datetime(index),
+                'type': 'text',
+            },
+        } for index in df.set_index('time').age.index]
+
+        return data, tooltip
 
 
 @app.callback(
@@ -608,6 +973,35 @@ def update_last_poo_color(value):
     df = pd.read_sql_table('diaper', con=ENGINE).set_index('time')
     color = df[df.poo]['poo-color'].dropna().sort_index().tail(1).iloc[0]
     return color
+
+
+@app.callback(
+    Output({'index': 'diaper', 'type': 'table2'}, 'style_data_conditional'),
+    Input({'index': 'diaper', 'type': 'table2'}, 'data'),
+    State({'index': 'diaper', 'type': 'table2'}, 'data_previous'),
+)
+def update_diaper_colors(data, data_last):
+    if data == data_last:
+        return dash.no_update
+    styles = []
+    df = pd.DataFrame.from_records(data)
+    for color in df['pee-color'].unique():
+        styles.append({
+            'if': {
+                'column_id': 'pee',
+                'filter_query': f'{{pee-color}} = "{color}"',
+            },
+            'backgroundColor': color,
+        })
+    for color in df['poo-color'].unique():
+        styles.append({
+            'if': {
+                'column_id': 'poo',
+                'filter_query': f'{{poo-color}} = "{color}"',
+            },
+            'backgroundColor': color,
+        })
+    return styles
 
 
 if __name__ == '__main__':
