@@ -337,16 +337,11 @@ app.layout = html.Div([
                         html.Div(id={'index': 'drink', 'type': 'debug'}, className='row visually-hidden'),
                         dbc.Tabs(
                             id={'index': 'drink', 'type': 'tabs'},
-                            active_tab='table2',
+                            active_tab='table',
                             children=[
                                 dbc.Tab(
-                                    dbc.Card(id={'index': 'drink', 'type': 'table'}),
-                                    label='Tabelle',
-                                    tab_id='table',
-                                ),
-                                dbc.Tab(
                                     dbc.Card(generate_table(
-                                        id={'index': 'drink', 'type': 'table2'},
+                                        id={'index': 'drink', 'type': 'table'},
                                         columns=[
                                             {
                                                 'id': 'breastmilk',
@@ -380,8 +375,8 @@ app.layout = html.Div([
                                             },
                                         ],
                                     )),
-                                    label='Tabelle2',
-                                    tab_id='table2',
+                                    label='Tabelle',
+                                    tab_id='table',
                                 ),
                                 dbc.Tab(
                                     dbc.Card(id={'index': 'drink', 'type': 'graph'}),
@@ -493,16 +488,11 @@ app.layout = html.Div([
                         html.Div(id={'index': 'diaper', 'type': 'debug'}, className='row visually-hidden'),
                         dbc.Tabs(
                             id={'index': 'diaper', 'type': 'tabs'},
-                            active_tab='table2',
+                            active_tab='table',
                             children=[
                                 dbc.Tab(
-                                    dbc.Card(id={'index': 'diaper', 'type': 'table'}),
-                                    label='Tabelle',
-                                    tab_id='table',
-                                ),
-                                dbc.Tab(
                                     dbc.Card(generate_table(
-                                        id={'index': 'diaper', 'type': 'table2'},
+                                        id={'index': 'diaper', 'type': 'table'},
                                         columns=[
                                             {
                                                 'id': 'changed',
@@ -532,8 +522,8 @@ app.layout = html.Div([
                                         ],
                                         hidden_columns=['poo-color', 'pee-color'],
                                     )),
-                                    label='Tabelle2',
-                                    tab_id='table2',
+                                    label='Tabelle',
+                                    tab_id='table',
                                 ),
                                 dbc.Tab(
                                     dbc.Card(id={'index': 'diaper', 'type': 'graph'}),
@@ -598,16 +588,11 @@ app.layout = html.Div([
                         html.Div(id={'index': 'pump', 'type': 'debug'}, className='row visually-hidden'),
                         dbc.Tabs(
                             id={'index': 'pump', 'type': 'tabs'},
-                            active_tab='table2',
+                            active_tab='table',
                             children=[
                                 dbc.Tab(
-                                    dbc.Card(id={'index': 'pump', 'type': 'table'}),
-                                    label='Tabelle',
-                                    tab_id='table',
-                                ),
-                                dbc.Tab(
                                     dbc.Card(generate_table(
-                                        id={'index': 'pump', 'type': 'table2'},
+                                        id={'index': 'pump', 'type': 'table'},
                                         columns=[
                                             {
                                                 'id': 'left',
@@ -621,8 +606,8 @@ app.layout = html.Div([
                                             },
                                         ],
                                     )),
-                                    label='Tabelle2',
-                                    tab_id='table2',
+                                    label='Tabelle',
+                                    tab_id='table',
                                 ),
                                 dbc.Tab(
                                     dbc.Card(id={'index': 'pump', 'type': 'graph'}),
@@ -705,16 +690,11 @@ app.layout = html.Div([
                         html.Div(id={'index': 'doctor', 'type': 'debug'}, className='row visually-hidden'),
                         dbc.Tabs(
                             id={'index': 'doctor', 'type': 'tabs'},
-                            active_tab='table2',
+                            active_tab='table',
                             children=[
                                 dbc.Tab(
-                                    dbc.Card(id={'index': 'doctor', 'type': 'table'}),
-                                    label='Tabelle',
-                                    tab_id='table',
-                                ),
-                                dbc.Tab(
                                     dbc.Card(generate_table(
-                                        id={'index': 'doctor', 'type': 'table2'},
+                                        id={'index': 'doctor', 'type': 'table'},
                                         columns=[
                                             {
                                                 'id': 'weight',
@@ -733,8 +713,8 @@ app.layout = html.Div([
                                             },
                                         ],
                                     )),
-                                    label='Tabelle2',
-                                    tab_id='table2',
+                                    label='Tabelle',
+                                    tab_id='table',
                                 ),
                                 dbc.Tab(
                                     dbc.Card(id={'index': 'doctor', 'type': 'graph'}),
@@ -855,36 +835,8 @@ for category in ['drink', 'diaper', 'pump', 'doctor']:
         return html.Pre(json.dumps(store, indent=2))
 
     @app.callback(
-        Output({'index': category, 'type': 'table'}, 'children'),
-        Input({'index': category, 'type': 'update'}, 'color'),
-        prevent_initial_call=True,
-    )
-    def update_table1(_):
-        triggered = ctx.triggered_prop_ids.values()
-        triggered_category = next(iter(triggered)).get('index')
-        try:
-            df = pd.read_sql_table(triggered_category, con=ENGINE)\
-                .sort_values(by='time').tail()
-            df['time'] = (df.time - BIRTH_DATE)\
-                .dt.round(dt.timedelta(minutes=1))\
-                .astype(str).str.removesuffix(':00')
-        except ValueError as err:
-            app.server.logger.critical(err)
-            df = pd.DataFrame()
-        # work around for wrong display of boolean in React
-        boolean = df.columns[df.dtypes == bool]
-        df[boolean] = df[boolean].replace(to_replace=[True, False], value=['🟢', '🔴'])
-        table = dbc.Table.from_dataframe(  # pylint: disable=E1101
-            df.tail().iloc[::-1],
-            striped=True,
-            bordered=True,
-            hover=True
-        )
-        return table
-
-    @app.callback(
-        Output({'index': category, 'type': 'table2'}, 'data'),
-        Output({'index': category, 'type': 'table2'}, 'tooltip_data'),
+        Output({'index': category, 'type': 'table'}, 'data'),
+        Output({'index': category, 'type': 'table'}, 'tooltip_data'),
         Input({'index': category, 'type': 'update'}, 'color'),
         prevent_initial_call=True,
     )
@@ -976,9 +928,9 @@ def update_last_poo_color(value):
 
 
 @app.callback(
-    Output({'index': 'diaper', 'type': 'table2'}, 'style_data_conditional'),
-    Input({'index': 'diaper', 'type': 'table2'}, 'data'),
-    State({'index': 'diaper', 'type': 'table2'}, 'data_previous'),
+    Output({'index': 'diaper', 'type': 'table'}, 'style_data_conditional'),
+    Input({'index': 'diaper', 'type': 'table'}, 'data'),
+    State({'index': 'diaper', 'type': 'table'}, 'data_previous'),
 )
 def update_diaper_colors(data, data_last):
     if data == data_last:
