@@ -16,6 +16,7 @@ from dash import html, dcc, Input, Output, State, ALL, ctx
 import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from sqlalchemy import create_engine
 import babel.dates as bd
 
@@ -73,8 +74,11 @@ HYPERBILIRUBINEMIA = {
 }
 
 
-def get_bilirubin_figure():
+def generate_bilirubin_figure(data=None):
     """
+    Arguments:
+        data: measured values for current baby as indexed Series of
+              bilirubin[µmol/l] vs age/[h]
     Factor: 1mg/dl = 17.1µmol/l
     Source: https://www.gastro.medline.ch/Services/_Tools/Um_und_Berechnungen/Umrechnung_von_mg_dl_mol_l.php
     """
@@ -84,7 +88,7 @@ def get_bilirubin_figure():
         '75th': px.colors.qualitative.Plotly[0],
         '95th': px.colors.qualitative.Plotly[1],
     }
-    pio = px.area(
+    fig = px.area(
         df,
         color_discrete_map=color_map,
         template='none',
@@ -93,7 +97,25 @@ def get_bilirubin_figure():
     ).update_layout(
         yaxis={'title': 'Bilirubin [µmol/l]'}
     )
-    return dcc.Graph(figure=pio)
+    if data is not None:
+        fig.add_trace(
+            go.Scatter(
+                name='baby',
+                x=data.index,
+                y=data,
+                mode='lines+markers',
+                marker=dict(
+                    color='LightSkyBlue',
+                    size=10,
+                    line=dict(
+                        color='MediumPurple',
+                        width=2,
+                    ),
+                ),
+                line=go.scatter.Line(color='gray'),
+                showlegend=True)
+        )
+    return dcc.Graph(figure=fig)
 
 
 def deep_update(data, update):
@@ -687,7 +709,10 @@ app.layout = html.Div([
                             disabled=False,
                         ),
                         dcc.Store(id={'index': 'doctor', 'type': 'store'}),
-                        html.Div(id={'index': 'doctor', 'type': 'debug'}, className='row visually-hidden'),
+                        html.Div(
+                            id={'index': 'doctor', 'type': 'debug'},
+                            className='row visually-hidden',
+                        ),
                         dbc.Tabs(
                             id={'index': 'doctor', 'type': 'tabs'},
                             active_tab='table',
@@ -722,16 +747,21 @@ app.layout = html.Div([
                                     tab_id='graph',
                                 ),
                                 dbc.Tab(
-                                    dbc.Card([
-                                        dbc.CardBody(get_bilirubin_figure()),
-                                        dbc.CardFooter(
-                                            dcc.Link(
-                                                'Bhutani et al. Pediatrics. 1999 Jan;103(1):6-14',
-                                                href='https://doi.org/10.1542/peds.103.1.6',
-                                                target='_blank',
+                                    dbc.Card(
+                                        children=[
+                                            dbc.CardBody(
+                                                id={'index': 'bilirubin', 'type': 'figure'},
+                                                children=generate_bilirubin_figure(),
+                                            ),
+                                            dbc.CardFooter(
+                                                dcc.Link(
+                                                    'Bhutani et al. Pediatrics. 1999 Jan;103(1):6-14',
+                                                    href='https://doi.org/10.1542/peds.103.1.6',
+                                                    target='_blank',
+                                                )
                                             )
-                                        )
-                                    ]),
+                                        ],
+                                    ),
                                     label='Bilirubin',
                                     tab_id='bilirubin',
                                 ),
@@ -954,6 +984,21 @@ def update_diaper_colors(data, data_last):
             'backgroundColor': color,
         })
     return styles
+
+
+@app.callback(
+    Output({'index': 'bilirubin', 'type': 'figure'}, 'children'),
+    Input({'index': 'doctor', 'type': 'table'}, 'data'),
+    State({'index': 'doctor', 'type': 'table'}, 'data_previous'),
+)
+def update_bilirubin_data(data, data_last):
+    if data == data_last:
+        return dash.no_update
+    df = pd.DataFrame.from_records(data)
+    df = df[df['bilirubin'].notna()]
+    df['age'] = (df.time.apply(pd.Timestamp) - BIRTH_DATE).astype('timedelta64[h]')
+    df = df.set_index('age')
+    return generate_bilirubin_figure(data=df['bilirubin'])
 
 
 if __name__ == '__main__':
