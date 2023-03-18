@@ -1,4 +1,4 @@
-.PHONY: docker
+.PHONY: docker build run shell daemon
 
 IMAGE := ukos/babytracker:latest
 
